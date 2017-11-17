@@ -1,3 +1,4 @@
+#cloud-boothook
 #!/usr/bin/env bash
 
 set -e -x
@@ -172,6 +173,11 @@ fi
 if [ -n "${UPDATE_FREQUENCY}" ]; then
   ( crontab -l | grep -v "$${KEY_UPDATER_SCRIPT}" ; echo "${UPDATE_FREQUENCY} /bin/bash -x $${KEY_UPDATER_SCRIPT} > /dev/null 2>&1" ) | crontab -
 fi
+
+# Apply security updates daily
+( crontab -l | grep -v 'yum -y update' ; echo "0 5 * * * yum -y update > /dev/null 2>&1" ) | crontab -
+# Restart sshd daily
+( crontab -l | grep -v '/sbin/service sshd restart' ; echo "0 6 * * * service sshd restart > /dev/null 2>&1" ) | crontab -
 
 # Prohibit key access to root & ec2-user
 rm -rf /root/.ssh /home/ec2-user/.ssh

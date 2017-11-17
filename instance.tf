@@ -19,4 +19,10 @@ resource "aws_instance" "bastion" {
     tags {
         Name = "${var.environment}-${var.name}"
     }
+
+    # Any metadata changes will trigger instance destroy
+    # see: https://github.com/terraform-providers/terraform-provider-aws/issues/23
+    lifecycle {
+        ignore_changes = ["user_data"]
+    }
 }

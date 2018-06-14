@@ -2,6 +2,7 @@ resource "aws_security_group" "bastion" {
   name        = "${var.environment}-${var.name}"
   description = "${var.environment}-${var.name} access from WAN"
   vpc_id      = "${var.vpc_id}"
+  tags        = "${merge(map("Name", "${var.environment}-${var.name}"),"${var.tags}")}"
 
   ingress {
     from_port   = 22

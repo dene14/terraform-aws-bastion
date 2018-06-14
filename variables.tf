@@ -21,3 +21,8 @@ variable "ami" {
 variable "vpc_id" {}
 
 variable "subnet_id" {}
+
+variable "tags" {
+  type    = "map"
+  default = {}
+}

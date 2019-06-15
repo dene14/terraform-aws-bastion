@@ -6,8 +6,8 @@ set -e -x
 KEY_UPDATER_SCRIPT=/root/update_keys.sh
 
 # Install required packages
-yum makecache || true
-yum -y install telnet nc google-authenticator
+yum -y install telnet nc
+yum -y install google-authenticator
 
 # Configure adding google auth into pam for sshd
 sed -i '1 i\# MFA auth\nauth [success=done new_authtok_reqd=done default=die] pam_google_authenticator.so' /etc/pam.d/sshd
@@ -80,15 +80,15 @@ create_user () {
       /usr/sbin/useradd -m -s /bin/bash $$USERNAME &&
       mkdir -p /home/$$USERNAME/.ssh &&
       chmod 700 /home/$$USERNAME/.ssh &&
-      chown $$USERNAME:$$USERNAME /home/$$USERNAME/.ssh && 
-      echo "`date "+%F %H-%M-%S"`: Creating user account for $$USERNAME"
+      chown $USERNAME:$$USERNAME /home/$$USERNAME/.ssh && 
+      echo "`date --date="today" "+%F %H-%M-%S"`: Creating user account for $$USERNAME" >> $$LOGFILE
     ;;
     0)
-      echo "`date "+%F %H-%M-%S"`: User account for $$USERNAME already here"
+      echo "`date --date="today" "+%F %H-%M-%S"`: User account for $$USERNAME already here" >> $$LOGFILE
       return 0
     ;;
     *)
-      echo "`date "+%F %H-%M-%S"`: Cannot create user $$USERNAME"
+      echo "`date --date="today" "+%F %H-%M-%S"`: Cannot create user $$USERNAME" >> $$LOGFILE
       return 1
     ;;
     esac
@@ -101,25 +101,20 @@ create_user () {
 remove_user () {
   USERNAME=$$1
 
-  echo "`date "+%F %H-%M-%S"`: Removing user account for $$USERNAME"
   pkill -9 -u $$USERNAME
-  /usr/sbin/userdel --force --remove $$USERNAME
-  rm -vrf /home/$$USERNAME
+  /usr/sbin/userdel $$USERNAME
+  rm -rf /home/$$USERNAME
+  echo "`date --date="today" "+%F %H-%M-%S"`: Removing user account for $$USERNAME" >> $$LOGFILE
 }
 
 update_user_key () {
   USERNAME=$$1
-
-  echo "`date "+%F %H-%M-%S"`: Updating user ssh key for $$USERNAME"
   aws s3api get-object --bucket $$BUCKET_NAME --key $${BUCKET_PREFIX}/$${USERNAME}/pubkey --output text /home/$$USERNAME/.ssh/authorized_keys.new
   mv /home/$$USERNAME/.ssh/authorized_keys.new /home/$$USERNAME/.ssh/authorized_keys
-  chmod --verbose 0400 /home/$$USERNAME/.ssh/authorized_keys
 }
 
 update_user_token () {
   USERNAME=$$1
-
-  echo "`date "+%F %H-%M-%S"`: Updating user ssh key for $$USERNAME"
   TOKEN_FILE=$$(mktemp)
   aws s3api get-object --bucket $$BUCKET_NAME --key $${BUCKET_PREFIX}/$${USERNAME}/token --output text $$TOKEN_FILE
   TOKEN=$(cat $$TOKEN_FILE)
@@ -133,24 +128,19 @@ $$TOKEN
 " TOTP_AUTH
 GAUTHENTICATOR
 
-  chmod --verbose 0400 /home/$$USERNAME/.google_authenticator
-  chown --verbose $$USERNAME.$$USERNAME /home/$$USERNAME/.google_authenticator
+  chmod 400 /home/$$USERNAME/.google_authenticator
+  chown $$USERNAME.$$USERNAME /home/$$USERNAME/.google_authenticator
 }
 
 # Creating skel
-
-export TZ=Etc/UTC
 mkdir -p $$(dirname $$LOGFILE)
-exec &>$${LOGFILE}
-echo "`date "+%F %H-%M-%S"`: $$0 Started"
-
-mkdir --verbose -p $$(dirname $$USER_LIST)
+mkdir -p $$(dirname $$USER_LIST)
 touch $$USER_LIST $${USER_LIST}.prev
 
 # Process user updates
 get_users > $${USER_LIST}.new
-cp -fav $$USER_LIST $${USER_LIST}.prev
-mv -fv $${USER_LIST}.new $$USER_LIST
+cp -f $$USER_LIST $${USER_LIST}.prev
+mv $${USER_LIST}.new $$USER_LIST
 
 USERS_TO_ADD=$$(users_to_add $${USER_LIST}.prev $$USER_LIST)
 USERS_TO_REMOVE=$$(users_to_remove $${USER_LIST}.prev $$USER_LIST)
@@ -167,10 +157,6 @@ for USER in $(cat $$USER_LIST); do
   update_user_key $$USER
   update_user_token $$USER
 done
-
-echo "`date "+%F %H-%M-%S"`: $$0 Finished"
-cat $${LOGFILE} >/dev/console
-
 EOF
 
 # Immediate apply
@@ -184,13 +170,14 @@ if [ $ERROR -ne 0 ]; then
     echo '# Crontab header' | crontab -
 fi
 
-( crontab -l | grep -Fv "PATH=/" ; echo "PATH=/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin" ) | crontab -
+if [ -n "${UPDATE_FREQUENCY}" ]; then
+  ( crontab -l | grep -v "$${KEY_UPDATER_SCRIPT}" ; echo "${UPDATE_FREQUENCY} /bin/bash -x $${KEY_UPDATER_SCRIPT} > /dev/null 2>&1" ) | crontab -
+fi
 
-( crontab -l | grep -Fv "$${KEY_UPDATER_SCRIPT}" ; echo "$${UPDATE_FREQUENCY:-*/5 * * * *} /bin/bash $${KEY_UPDATER_SCRIPT}" ) | crontab -
 # Apply security updates daily
-( crontab -l | grep -Fv 'yum -y upgrade' ; echo "0 5 * * * yum -y upgrade > /dev/null 2>&1" ) | crontab -
+( crontab -l | grep -v 'yum -y update' ; echo "0 5 * * * yum -y update > /dev/null 2>&1" ) | crontab -
 # Restart sshd daily
-( crontab -l | grep -Fv 'sshd restart' ; echo "0 6 * * * service sshd restart > /dev/null 2>&1" ) | crontab -
+( crontab -l | grep -v '/sbin/service sshd restart' ; echo "0 6 * * * /sbin/service sshd restart > /dev/null 2>&1" ) | crontab -
 
 # Prohibit key access to root & ec2-user
 rm -rf /root/.ssh /home/ec2-user/.ssh

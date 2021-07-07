@@ -7,7 +7,7 @@ resource "aws_iam_role" "bastion" {
 data "template_file" "bastion_policy" {
   template = "${file("${path.module}/files/BastionPolicy.json")}"
 
-  vars {
+  vars = {
     BUCKET     = "${replace("${var.bucket_uri}", "/^(s3://)([^/]*)(.*)$/", "arn:aws:s3:::$2")}"
     BUCKET_URI = "${replace("${var.bucket_uri}", "/^(s3://)([^/]*)(.*)$/", "arn:aws:s3:::$2$3*")}"
   }

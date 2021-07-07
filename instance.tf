@@ -1,7 +1,7 @@
 data "template_file" "user_data" {
   template = "${file("${path.module}/files/bastion_init.sh")}"
 
-  vars {
+  vars = {
     UPDATE_FREQUENCY = "${var.update_frequency}"
     REGION           = "${data.aws_region.current.name}"
     BUCKET           = "${replace("${var.bucket_uri}", "/^(s3://)([^/]*)(.*)$/", "$2")}"
@@ -21,6 +21,6 @@ resource "aws_instance" "bastion" {
   # Any metadata changes will trigger instance destroy
   # see: https://github.com/terraform-providers/terraform-provider-aws/issues/23
   lifecycle {
-    ignore_changes = ["user_data"]
+    ignore_changes = [user_data]
   }
 }
